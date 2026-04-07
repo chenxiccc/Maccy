@@ -56,6 +56,14 @@ class HistoryItemDecorator: Identifiable, Hashable {
   var thumbnailImage: NSImage?
   var applicationImage: ApplicationImage
 
+  // 原始图片尺寸（在 generatePreviewImage 时缓存）
+  // Original image size (cached during generatePreviewImage)
+  var originalImageSize: NSSize?
+
+  // 是否有图片内容
+  // Whether this item has image content
+  var hasImage: Bool { item.image != nil }
+
   // 10k characters seems to be more than enough on large displays
   var text: String { item.previewableText.shortened(to: 10_000) }
 
@@ -136,6 +144,8 @@ class HistoryItemDecorator: Identifiable, Hashable {
     guard let image = item.image else {
       return
     }
+    // 缓存原始图片尺寸 / Cache original image size
+    originalImageSize = image.size
     previewImage = image.resized(to: HistoryItemDecorator.previewImageSize)
   }
 
