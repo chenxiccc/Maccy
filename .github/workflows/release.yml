@@ -24,7 +24,7 @@ jobs:
   # =========================================================================
   build:
     name: Build ${{ matrix.arch.name }}
-    runs-on: macos-14
+    runs-on: macos-26
     strategy:
       matrix:
         arch:
@@ -83,7 +83,7 @@ jobs:
   # =========================================================================
   universal:
     name: Build Universal Binary
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
