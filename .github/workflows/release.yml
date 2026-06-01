@@ -1,0 +1,122 @@
+name: Build Release
+
+# 当推送到 feature/smart-preview-position 分支或手动触发时运行
+# Run on push to feature/smart-preview-position branch or manual trigger
+on:
+  push:
+    branches:
+      - feature/smart-preview-position
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} Release
+    runs-on: macos-14
+    strategy:
+      matrix:
+        arch:
+          - name: Intel
+            archs: x86_64
+          - name: AppleSilicon
+            archs: arm64
+
+    steps:
+      # 检出代码 / Checkout code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 设置 Xcode 版本（可选，锁定版本以保持构建一致性）
+      # Set Xcode version (optional, pin version for build consistency)
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # 解析 SPM 依赖并构建 / Resolve SPM dependencies and build
+      - name: Build ${{ matrix.arch.name }} (${{ matrix.arch.archs }})
+        run: |
+          xcodebuild \
+            -scheme Maccy \
+            -configuration Release \
+            -derivedDataPath build_${{ matrix.arch.archs }} \
+            -archivePath archive_${{ matrix.arch.archs }} \
+            ARCHS="${{ matrix.arch.archs }}" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # 打包 .app 为 .zip / Package .app into .zip
+      - name: Package ${{ matrix.arch.name }}
+        run: |
+          APP_PATH="build_${{ matrix.arch.archs }}/Build/Products/Release/Maccy.app"
+          ZIP_NAME="Maccy-${{ matrix.arch.name }}-${{ matrix.arch.archs }}.zip"
+
+          # 用 ditto 打包保留权限和符号链接 / Use ditto to preserve permissions and symlinks
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP_NAME"
+
+          # 验证 zip 内容 / Verify zip contents
+          echo "Archive created: $ZIP_NAME"
+          ls -lh "$ZIP_NAME"
+
+      # 上传构建产物 / Upload build artifact
+      - name: Upload ${{ matrix.arch.name }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Maccy-${{ matrix.arch.name }}-${{ matrix.arch.archs }}
+          path: Maccy-${{ matrix.arch.name }}-${{ matrix.arch.archs }}.zip
+          retention-days: 30
+
+  # 合并为 Universal Binary（可选，生成同时支持两架构的版本）
+  # Merge into Universal Binary (optional, single binary for both architectures)
+  universal:
+    name: Build Universal Binary
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # 一次构建 Universal Binary / Single build for both architectures
+      - name: Build Universal
+        run: |
+          xcodebuild \
+            -scheme Maccy \
+            -configuration Release \
+            -derivedDataPath build_universal \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # 验证二进制包含两种架构 / Verify binary contains both architectures
+      - name: Verify Universal Binary
+        run: |
+          APP_PATH="build_universal/Build/Products/Release/Maccy.app"
+          BINARY="$APP_PATH/Contents/MacOS/Maccy"
+          echo "Architectures in binary:"
+          lipo -info "$BINARY"
+
+      - name: Package Universal
+        run: |
+          APP_PATH="build_universal/Build/Products/Release/Maccy.app"
+          ZIP_NAME="Maccy-Universal.zip"
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP_NAME"
+          ls -lh "$ZIP_NAME"
+
+      - name: Upload Universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Maccy-Universal
+          path: Maccy-Universal.zip
+          retention-days: 30
